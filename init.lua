@@ -44,7 +44,7 @@ minetest.register_on_chat_message(function(name, message)
 	end
 
 	for _, w in ipairs(words) do
-		if string.match(message, w) then
+		if string.find(message, "%f[%a]" .. w .. "%f[%A]") then
 			local privs = minetest.get_player_privs(name)
 
 			privs.shout = nil
