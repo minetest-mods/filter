@@ -45,8 +45,6 @@ minetest.register_on_chat_message(function(name, message)
 
 	for _, w in ipairs(words) do
 		if string.find(message, "%f[%a]" .. w .. "%f[%A]") then
-			local privs = minetest.get_player_privs(name)
-
 			privs.shout = nil
 			minetest.set_player_privs(name, privs)
 			minetest.chat_send_player(name, "Chat temporarily disabled due to language.")
