@@ -77,6 +77,7 @@ function filter.mute(name, duration)
 		privs.shout = nil
 		minetest.set_player_privs(name, privs)
 	end
+
 	minetest.chat_send_player(name, "Watch your language! You have been temporarily muted")
 
 	muted[name] = true
@@ -195,5 +196,13 @@ if minetest.global_exists("rules") and rules.show then
 		end
 	end)
 end
+
+minetest.register_on_shutdown(function()
+	for name, _ in pairs(muted) do
+		local privs = minetest.get_player_privs(name)
+		privs.shout = true
+		minetest.set_player_privs(name, privs)
+	end
+end)
 
 filter.init()
