@@ -11,5 +11,6 @@ read_globals = {
 	"intllib",
 	"default",
 	"rules",
+	"email",
 	table = { fields = { "copy", "getn" } }
 }
