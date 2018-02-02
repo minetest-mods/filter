@@ -66,6 +66,26 @@ function filter.check_message(name, message)
 	return true
 end
 
+function filter.mute(name, duration)
+	do
+		local privs = minetest.get_player_privs(name)
+		privs.shout = nil
+		minetest.set_player_privs(name, privs)
+	end
+	minetest.chat_send_player(name, "Watch your language! You have been temporarily muted")
+
+	muted[name] = true
+
+	minetest.after(duration * 60, function()
+		muted[name] = nil
+		minetest.chat_send_player(name, "Chat privilege reinstated. Please do not abuse chat.")
+
+		local privs = minetest.get_player_privs(name)
+		privs.shout = true
+		minetest.set_player_privs(name, privs)
+	end)
+end
+
 function filter.on_violation(name, message)
 	violations[name] = (violations[name] or 0) + 1
 
@@ -76,19 +96,7 @@ function filter.on_violation(name, message)
 		minetest.kick_player(name, "Please mind your language!")
 	else
 		resolution = "muted"
-		local privs = minetest.get_player_privs(name)
-		privs.shout = nil
-		minetest.set_player_privs(name, privs)
-		minetest.chat_send_player(name, "Watch your language! You have been temporarily muted")
-
-		muted[name] = true
-
-		minetest.after(60, function()
-			muted[name] = nil
-			minetest.chat_send_player(name, "Chat privilege reinstated. Please do not abuse chat.")
-			privs.shout = true
-			minetest.set_player_privs(name, privs)
-		end)
+		filter.mute(name, 1)
 	end
 
 	minetest.log("action", "VIOLATION (" .. resolution .. "): <" .. name .. "> "..  message)
