@@ -25,7 +25,7 @@
 
 ]]--
 
-filter = {}
+filter = { registered_on_violations = {} }
 local words = {}
 local muted = {}
 local violations = {}
@@ -55,6 +55,10 @@ function filter.import_file(filepath)
 	else
 		return false
 	end
+end
+
+function filter.register_on_violation(func)
+	table.insert(filter.registered_on_violations, func)
 end
 
 function filter.check_message(name, message)
@@ -111,15 +115,23 @@ function filter.on_violation(name, message)
 
 	local resolution
 
-	if violations[name] == 1 and minetest.get_player_by_name(name) then
-		resolution = "warned"
-		filter.show_warning_formspec(name)
-	elseif violations[name] <= 3 then
-		resolution = "muted"
-		filter.mute(name, 1)
-	else
-		resolution = "kicked"
-		minetest.kick_player(name, "Please mind your language!")
+	for _, cb in pairs(filter.registered_on_violations) do
+		if cb(name, message, violations) then
+			resolution = "custom"
+		end
+	end
+
+	if not resolution then
+		if violations[name] == 1 and minetest.get_player_by_name(name) then
+			resolution = "warned"
+			filter.show_warning_formspec(name)
+		elseif violations[name] <= 3 then
+			resolution = "muted"
+			filter.mute(name, 1)
+		else
+			resolution = "kicked"
+			minetest.kick_player(name, "Please mind your language!")
+		end
 	end
 
 	minetest.log("action", "VIOLATION (" .. resolution .. "): <" .. name .. "> "..  message)
@@ -145,9 +157,9 @@ local function step()
 			violations[name] = nil
 		end
 	end
-	minetest.after(2*60, step)
+	minetest.after(10*60, step)
 end
-minetest.after(2*60, step)
+minetest.after(10*60, step)
 
 minetest.register_chatcommand("filter", {
 	params = "filter server",
