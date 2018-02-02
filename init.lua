@@ -24,43 +24,99 @@
 
 ]]--
 
+filter = {}
+local words = {}
+local muted = {}
+local violations = {}
 local s = minetest.get_mod_storage()
-assert(s, "minetest version too old")
 
-local words
-local sw = s:get_string("words")
+function filter.init()
+	local sw = s:get_string("words")
+	if sw and sw ~= "" then
+		words = minetest.parse_json(sw)
+	end
 
-if sw and sw ~= "" then
-	words = minetest.parse_json(sw)
-else
-	words = {}
+	if #words == 0 then
+		filter.import_file(minetest.get_modpath("filter") .. "/words.txt")
+	end
 end
 
-minetest.register_on_chat_message(function(name, message)
+function filter.import_file(filepath)
+	local file = io.open(filepath, "r")
+	if file then
+		for line in file:lines() do
+			line = line:trim()
+			if line ~= "" then
+				words[#words + 1] = line:trim()
+			end
+		end
+		return true
+	else
+		return false
+	end
+end
+
+function filter.check_message(name, message)
+	for _, w in ipairs(words) do
+		if string.find(message:lower(), "%f[%a]" .. w .. "%f[%A]") then
+			return false
+		end
+	end
+
+	return true
+end
+
+function filter.on_violation(name, message)
+	violations[name] = (violations[name] or 0) + 1
+
+	local resolution
+
+	if violations[name] >= 3 then
+		resolution = "kicked"
+		minetest.kick_player(name, "Please mind your language!")
+	else
+		resolution = "muted"
+		local privs = minetest.get_player_privs(name)
+		privs.shout = nil
+		minetest.set_player_privs(name, privs)
+		minetest.chat_send_player(name, "Watch your language! You have been temporarily muted")
+
+		muted[name] = true
+
+		minetest.after(60, function()
+			muted[name] = nil
+			minetest.chat_send_player(name, "Chat privilege reinstated. Please do not abuse chat.")
+			privs.shout = true
+			minetest.set_player_privs(name, privs)
+		end)
+	end
+
+	minetest.log("action", "VIOLATION (" .. resolution .. "): <" .. name .. "> "..  message)
+end
+
+table.insert(minetest.registered_on_chat_messages, 1, function(name, message)
 	local privs = minetest.get_player_privs(name)
-	if not privs.shout then
+	if not privs.shout and muted[name] then
 		minetest.chat_send_player(name, "You are temporarily muted.")
 		return true
 	end
 
-	for _, w in ipairs(words) do
-		if string.find(message, "%f[%a]" .. w .. "%f[%A]") then
-			privs.shout = nil
-			minetest.set_player_privs(name, privs)
-			minetest.chat_send_player(name, "Chat temporarily disabled due to language.")
+	if not filter.check_message(name, message) then
+		filter.on_violation(name, message)
+		return true
+	end
+end)
 
-			minetest.after(60, function()
-				minetest.chat_send_player(name, "Chat privilege reinstated. Please do not abuse chat.")
-				privs.shout = true
-				minetest.set_player_privs(name, privs)
-			end)
-
-			return true
+local function step()
+	for name, v in pairs(violations) do
+		violations[name] = math.floor(v * 0.5)
+		if violations[name] < 1 then
+			violations[name] = nil
 		end
 	end
-
-	return false
-end)
+	minetest.after(2*60, step)
+end
+minetest.after(2*60, step)
 
 minetest.register_chatcommand("filter", {
 	params = "filter server",
@@ -69,7 +125,7 @@ minetest.register_chatcommand("filter", {
 	func = function(name, param)
 		local cmd, val = param:match("(%w+) (.+)")
 		if param == "list" then
-			return true, table.concat(words, ", ")
+			return true, #words .. " words: " .. table.concat(words, ", ")
 		elseif cmd == "add" then
 			table.insert(words, val)
 			s:set_string("words", minetest.write_json(words))
@@ -84,7 +140,9 @@ minetest.register_chatcommand("filter", {
 			end
 			return true, "\"" .. val .. "\" not found in list."
 		else
-			return true, "Usage: /filter <add|remove|list> [<word>]"
+			return true, "I know " .. #words .. " words.\nUsage: /filter <add|remove|list> [<word>]"
 		end
 	end,
 })
+
+filter.init()
