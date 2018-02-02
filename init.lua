@@ -69,13 +69,17 @@ end
 function filter.on_violation(name, message)
 	violations[name] = (violations[name] or 0) + 1
 
+	local resolution
+
 	if violations[name] >= 3 then
+		resolution = "kicked"
 		minetest.kick_player(name, "Please mind your language!")
 	else
+		resolution = "muted"
 		local privs = minetest.get_player_privs(name)
 		privs.shout = nil
 		minetest.set_player_privs(name, privs)
-		minetest.chat_send_player(name, "Chat temporarily disabled due to language.")
+		minetest.chat_send_player(name, "Watch your language! You have been temporarily muted")
 
 		muted[name] = true
 
@@ -86,9 +90,11 @@ function filter.on_violation(name, message)
 			minetest.set_player_privs(name, privs)
 		end)
 	end
+
+	minetest.log("action", "VIOLATION (" .. resolution .. "): <" .. name .. "> "..  message)
 end
 
-minetest.register_on_chat_message(function(name, message)
+table.insert(minetest.registered_on_chat_messages, 1, function(name, message)
 	local privs = minetest.get_player_privs(name)
 	if not privs.shout and muted[name] then
 		minetest.chat_send_player(name, "You are temporarily muted.")
