@@ -18,4 +18,3 @@ the time expires, not before.
 
 - the `shout` priv is permanently lost if the server shuts down while
 a player is muted.
-

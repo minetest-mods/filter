@@ -1,7 +1,8 @@
 
 --[[
 
-	Copyright 2017 Auke Kok <sofar@foo-projects.org>
+	Copyright 2017-8 Auke Kok <sofar@foo-projects.org>
+	Copyright 2018 rubenwardy <rw@rubenwardy.com>
 
 	Permission is hereby granted, free of charge, to any person obtaining
 	a copy of this software and associated documentation files (the
@@ -86,17 +87,39 @@ function filter.mute(name, duration)
 	end)
 end
 
+function filter.show_warning_formspec(name)
+	local formspec = "size[7,3]bgcolor[#080808BB;true]" .. default.gui_bg .. default.gui_bg_img .. [[
+		image[0,0;2,2;filter_warning.png]
+		label[2.3,0.5;Please watch your language!]
+	]]
+
+	if minetest.global_exists("rules") and rules.show then
+		formspec = formspec .. [[
+				button[0.5,2.1;3,1;rules;Show Rules]
+				button_exit[3.5,2.1;3,1;close;Okay]
+			]]
+	else
+		formspec = formspec .. [[
+				button_exit[2,2.1;3,1;close;Okay]
+			]]
+	end
+	minetest.show_formspec(name, "filter:warning", formspec)
+end
+
 function filter.on_violation(name, message)
 	violations[name] = (violations[name] or 0) + 1
 
 	local resolution
 
-	if violations[name] >= 3 then
-		resolution = "kicked"
-		minetest.kick_player(name, "Please mind your language!")
-	else
+	if violations[name] == 1 and minetest.get_player_by_name(name) then
+		resolution = "warned"
+		filter.show_warning_formspec(name)
+	elseif violations[name] <= 3 then
 		resolution = "muted"
 		filter.mute(name, 1)
+	else
+		resolution = "kicked"
+		minetest.kick_player(name, "Please mind your language!")
 	end
 
 	minetest.log("action", "VIOLATION (" .. resolution .. "): <" .. name .. "> "..  message)
@@ -152,5 +175,13 @@ minetest.register_chatcommand("filter", {
 		end
 	end,
 })
+
+if minetest.global_exists("rules") and rules.show then
+	minetest.register_on_player_receive_fields(function(player, formname, fields)
+		if formname == "filter:warning" and fields.rules then
+			rules.show(player)
+		end
+	end)
+end
 
 filter.init()
