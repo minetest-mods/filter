@@ -135,7 +135,13 @@ function filter.on_violation(name, message)
 		end
 	end
 
-	minetest.log("action", "VIOLATION (" .. resolution .. "): <" .. name .. "> "..  message)
+	local logmsg = "VIOLATION (" .. resolution .. "): <" .. name .. "> "..  message
+	minetest.log("action", logmsg)
+
+	local email_to = minetest.settings:get("filter.email_to")
+	if email_to and minetest.global_exists("email") then
+		email.send_mail(name, email_to, logmsg)
+	end
 end
 
 table.insert(minetest.registered_on_chat_messages, 1, function(name, message)
