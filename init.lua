@@ -145,6 +145,10 @@ function filter.on_violation(name, message)
 end
 
 table.insert(minetest.registered_on_chat_messages, 1, function(name, message)
+	if message:sub(1, 1) == "/" then
+		return
+	end
+
 	local privs = minetest.get_player_privs(name)
 	if not privs.shout and muted[name] then
 		minetest.chat_send_player(name, "You are temporarily muted.")
@@ -156,6 +160,33 @@ table.insert(minetest.registered_on_chat_messages, 1, function(name, message)
 		return true
 	end
 end)
+
+
+local function make_checker(old_func)
+	return function(name, param)
+		if not filter.check_message(name, param) then
+			filter.on_violation(name, param)
+			return false
+		end
+
+		return old_func(name, param)
+	end
+end
+
+for name, def in pairs(minetest.registered_chatcommands) do
+	if def.privs and def.privs.shout then
+		def.func = make_checker(def.func)
+	end
+end
+
+local old_register_chatcommand = minetest.register_chatcommand
+function minetest.register_chatcommand(name, def)
+	if def.privs and def.privs.shout then
+		def.func = make_checker(def.func)
+	end
+	return old_register_chatcommand(name, def)
+end
+
 
 local function step()
 	for name, v in pairs(violations) do
