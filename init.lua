@@ -62,8 +62,9 @@ function filter.register_on_violation(func)
 end
 
 function filter.check_message(name, message)
+	local trimmed_msg = message:gsub(" ","")
 	for _, w in ipairs(words) do
-		if string.find(message:lower(), "%f[%a]" .. w .. "%f[%A]") then
+		if string.find(trimmed_msg:lower(), "%f[%a]" .. w .. "%f[%A]") then
 			return false
 		end
 	end
