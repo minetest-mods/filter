@@ -1,9 +1,6 @@
-
 --[[
-
 	Copyright 2017-8 Auke Kok <sofar@foo-projects.org>
 	Copyright 2018 rubenwardy <rw@rubenwardy.com>
-
 	Permission is hereby granted, free of charge, to any person obtaining
 	a copy of this software and associated documentation files (the
 	"Software"), to deal in the Software without restriction, including
@@ -11,10 +8,8 @@
 	distribute, sublicense, and/or sell copies of the Software, and to
 	permit persons to whom the Software is furnished to do so, subject
 	to the following conditions:
-
 	The above copyright notice and this permission notice shall be included
 	in all copies or substantial portions of the Software.
-
 	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
 	KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
 	WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -22,7 +17,6 @@
 	LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 	OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 	WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
 ]]--
 
 filter = { registered_on_violations = {} }
@@ -78,13 +72,13 @@ function filter.mute(name, duration)
 		minetest.set_player_privs(name, privs)
 	end
 
-	minetest.chat_send_player(name, "Watch your language! You have been temporarily muted")
+	minetest.chat_send_player(name, minetest.colorize("#FF8C00","Watch your language! You have been temporarily muted"))
 
 	muted[name] = true
 
 	minetest.after(duration * 60, function()
 		muted[name] = nil
-		minetest.chat_send_player(name, "Chat privilege reinstated. Please do not abuse chat.")
+		minetest.chat_send_player(name, minetest.colorize("#FF8C00","Chat privilege reinstated. Please do not abuse chat."))
 
 		local privs = minetest.get_player_privs(name)
 		privs.shout = true
