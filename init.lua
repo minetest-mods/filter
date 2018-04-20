@@ -62,8 +62,9 @@ function filter.register_on_violation(func)
 end
 
 function filter.check_message(name, message)
+	local trimmed_msg = message:gsub(" ","")
 	for _, w in ipairs(words) do
-		if string.find(message:lower(), "%f[%a]" .. w .. "%f[%A]") then
+		if string.find(trimmed_msg:lower(), "%f[%a]" .. w .. "%f[%A]") then
 			return false
 		end
 	end
@@ -78,17 +79,18 @@ function filter.mute(name, duration)
 		minetest.set_player_privs(name, privs)
 	end
 
-	minetest.chat_send_player(name, "Watch your language! You have been temporarily muted")
+	minetest.chat_send_player(name, minetest.colorize("#FF8C00","Watch your language! You have been temporarily muted"))
 
 	muted[name] = true
 
 	minetest.after(duration * 60, function()
 		muted[name] = nil
-		minetest.chat_send_player(name, "Chat privilege reinstated. Please do not abuse chat.")
-
 		local privs = minetest.get_player_privs(name)
-		privs.shout = true
-		minetest.set_player_privs(name, privs)
+		if privs.shout == false then
+			minetest.chat_send_player(name, minetest.colorize("#FF8C00","Chat privilege reinstated. Please do not abuse chat."))		
+			privs.shout = true
+			minetest.set_player_privs(name, privs)
+		end
 	end)
 end
 
