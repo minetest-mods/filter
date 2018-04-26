@@ -83,10 +83,14 @@ function filter.mute(name, duration)
 	muted[name] = true
 
 	minetest.after(duration * 60, function()
+		privs = minetest.get_player_privs(name)
+		if privs.shout==true then
+			return
+		end
+			
 		muted[name] = nil
 		minetest.chat_send_player(name, "Chat privilege reinstated. Please do not abuse chat.")
 
-		local privs = minetest.get_player_privs(name)
 		privs.shout = true
 		minetest.set_player_privs(name, privs)
 	end)
