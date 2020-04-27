@@ -23,84 +23,98 @@
 	OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 	WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-]]--
+--]]
 
-filter = { registered_on_violations = {} }
-local words = {}
+filter = {
+	assets = {},
+	storage = minetest.get_mod_storage()
+}
 local muted = {}
 local violations = {}
-local s = minetest.get_mod_storage()
+local registered_on_violations = {}
+local registered_on_init = {}
+local registered_filters = {}
+local registered_chatcommands = {}
 
-function filter.init()
-	local sw = s:get_string("words")
-	if sw and sw ~= "" then
-		words = minetest.parse_json(sw)
-	end
+-- Run callback at startup. Can be used for data initialization
+-- or loading assets from mod storage
+function filter.register_on_init(func)
+	table.insert(registered_on_init, func)
+end
 
-	if #words == 0 then
-		filter.import_file(minetest.get_modpath("filter") .. "/words.txt")
+-- Filters return a warning string if triggered
+function filter.register_filter(name, func)
+	assert(not registered_filters[name])
+	registered_filters[name] = func
+	filter.assets["name"] = {}
+end
+
+local help_str = ""
+local function update_help()
+	help_str = ""
+	for name, def in pairs(registered_chatcommands) do
+		help_str = help_str .. "\n\t\"" .. name .."\": " .. def.description
 	end
 end
 
-function filter.import_file(filepath)
-	local file = io.open(filepath, "r")
-	if file then
-		for line in file:lines() do
-			line = line:trim()
-			if line ~= "" then
-				words[#words + 1] = line:trim()
-			end
+-- /filter sub-command registration method
+function filter.register_chatcommand(name, def)
+	assert(not registered_chatcommands[name])
+	registered_chatcommands[name] = def
+	update_help()
+end
+
+-- check_message invokes all filters, and returns true and a '\n'
+-- separated list of warnings if at least one filter is triggered
+local function check_message(name, message)
+	local str
+	local ret_val = {}
+
+	for _, fn in pairs(filter.registered_filters) do
+		str = fn(name, message)
+		if str and str ~= "" then
+			table.insert(ret_val[name], str)
 		end
-		return true
-	else
-		return false
-	end
-end
-
-function filter.register_on_violation(func)
-	table.insert(filter.registered_on_violations, func)
-end
-
-function filter.check_message(name, message)
-	for _, w in ipairs(words) do
-		if string.find(message:lower(), "%f[%a]" .. w .. "%f[%A]") then
-			return false
-		end
 	end
 
-	return true
+	local ret = table.concat(ret_val[name], "\n")
+	if ret and ret ~= "" then
+		ret_val[name] = {}
+		return true, ret
+	end
+	return false
 end
 
-function filter.mute(name, duration)
+local function mute(name, duration)
 	do
 		local privs = minetest.get_player_privs(name)
 		privs.shout = nil
 		minetest.set_player_privs(name, privs)
 	end
 
-	minetest.chat_send_player(name, "Watch your language! You have been temporarily muted")
+	minetest.chat_send_player(name, "You have been temporarily muted for abusing the chat.")
 
 	muted[name] = true
 
-	minetest.after(duration * 60, function()
-		privs = minetest.get_player_privs(name)
+	minetest.after(duration * 60, function(name)
+		local privs = minetest.get_player_privs(name)
 		if privs.shout == true then
 			return
 		end
 
 		muted[name] = nil
-		minetest.chat_send_player(name, "Chat privilege reinstated. Please do not abuse chat.")
+		minetest.chat_send_player(name, "Chat privilege reinstated. Please do not abuse the chat.")
 
 		privs.shout = true
 		minetest.set_player_privs(name, privs)
-	end)
+	end, name)
 end
 
-function filter.show_warning_formspec(name)
-	local formspec = "size[7,3]bgcolor[#080808BB;true]" .. default.gui_bg .. default.gui_bg_img .. [[
-		image[0,0;2,2;filter_warning.png]
-		label[2.3,0.5;Please watch your language!]
-	]]
+local function show_warning_formspec(name, warnings)
+	local formspec = "size[7,3]bgcolor[#080808BB;true]"
+		.. "default.gui_bg" .. "default.gui_bg_img"
+		.. "image[0,0;2,2;filter_warning.png]"
+		.. "label[2.3,0.5;" .. warnings .. "]"
 
 	if minetest.global_exists("rules") and rules.show then
 		formspec = formspec .. [[
@@ -115,7 +129,7 @@ function filter.show_warning_formspec(name)
 	minetest.show_formspec(name, "filter:warning", formspec)
 end
 
-function filter.on_violation(name, message)
+local function on_violation(name, message, warnings)
 	violations[name] = (violations[name] or 0) + 1
 
 	local resolution
@@ -129,13 +143,13 @@ function filter.on_violation(name, message)
 	if not resolution then
 		if violations[name] == 1 and minetest.get_player_by_name(name) then
 			resolution = "warned"
-			filter.show_warning_formspec(name)
+			show_warning_formspec(name, warnings)
 		elseif violations[name] <= 3 then
 			resolution = "muted"
-			filter.mute(name, 1)
+			mute(name, 1)
 		else
 			resolution = "kicked"
-			minetest.kick_player(name, "Please mind your language!")
+			minetest.kick_player(name, "Kicked for abusing the chat.")
 		end
 	end
 
@@ -146,6 +160,29 @@ function filter.on_violation(name, message)
 	if email_to and minetest.global_exists("email") then
 		email.send_mail(name, email_to, logmsg)
 	end
+end
+
+local function make_checker(old_func)
+	return function(name, param)
+		if not check_message(name, param) then
+			on_violation(name, param)
+			return false
+		end
+
+		return old_func(name, param)
+	end
+end
+
+local old_register_chatcommand = minetest.register_chatcommand
+function minetest.register_chatcommand(name, def)
+	if def.privs and def.privs.shout then
+		def.func = make_checker(def.func)
+	end
+	return old_register_chatcommand(name, def)
+end
+
+function filter.register_on_violation(func)
+	table.insert(registered_on_violations, func)
 end
 
 table.insert(minetest.registered_on_chat_messages, 1, function(name, message)
@@ -159,38 +196,18 @@ table.insert(minetest.registered_on_chat_messages, 1, function(name, message)
 		return true
 	end
 
-	if not filter.check_message(name, message) then
-		filter.on_violation(name, message)
+	local dirty, warnings = check_message(name, message)
+	if dirty then
+		on_violation(name, message, warnings)
 		return true
 	end
 end)
-
-
-local function make_checker(old_func)
-	return function(name, param)
-		if not filter.check_message(name, param) then
-			filter.on_violation(name, param)
-			return false
-		end
-
-		return old_func(name, param)
-	end
-end
 
 for name, def in pairs(minetest.registered_chatcommands) do
 	if def.privs and def.privs.shout then
 		def.func = make_checker(def.func)
 	end
 end
-
-local old_register_chatcommand = minetest.register_chatcommand
-function minetest.register_chatcommand(name, def)
-	if def.privs and def.privs.shout then
-		def.func = make_checker(def.func)
-	end
-	return old_register_chatcommand(name, def)
-end
-
 
 local function step()
 	for name, v in pairs(violations) do
@@ -204,39 +221,25 @@ end
 minetest.after(10*60, step)
 
 minetest.register_chatcommand("filter", {
-	params = "filter server",
-	description = "manage swear word filter",
+	params = "<sub-command> [<args>]",
+	description = "List of possible sub-commands:" .. help_str,
 	privs = {server = true},
 	func = function(name, param)
-		local cmd, val = param:match("(%w+) (.+)")
-		if param == "list" then
-			return true, #words .. " words: " .. table.concat(words, ", ")
-		elseif cmd == "add" then
-			table.insert(words, val)
-			s:set_string("words", minetest.write_json(words))
-			return true, "Added \"" .. val .. "\"."
-		elseif cmd == "remove" then
-			for i, w in ipairs(words) do
-				if w == val then
-					table.remove(words, i)
-					s:set_string("words", minetest.write_json(words))
-					return true, "Removed \"" .. val .. "\"."
-				end
-			end
-			return true, "\"" .. val .. "\" not found in list."
-		else
-			return true, "I know " .. #words .. " words.\nUsage: /filter <add|remove|list> [<word>]"
+		local fn, cmd = param:match("(%w+) (.+)")
+		if fn then
+			minetest.chat_send_all("fn " .. fn)
 		end
-	end,
-})
+		if cmd then
+			minetest.chat_send_all("cmd " .. cmd)
+		end
 
-if minetest.global_exists("rules") and rules.show then
-	minetest.register_on_player_receive_fields(function(player, formname, fields)
-		if formname == "filter:warning" and fields.rules then
-			rules.show(player)
+		if not registered_chatcommands[fn] then
+			return false, "Invalid sub-command. See /help filter"
 		end
-	end)
-end
+
+		return registered_chatcommands[fn].func(cmd)
+	end
+})
 
 minetest.register_on_shutdown(function()
 	for name, _ in pairs(muted) do
@@ -246,4 +249,21 @@ minetest.register_on_shutdown(function()
 	end
 end)
 
-filter.init()
+if minetest.global_exists("rules") and rules.show then
+	minetest.register_on_player_receive_fields(function(player, formname, fields)
+		if formname == "filter:warning" and fields.rules then
+			rules.show(player)
+		end
+	end)
+end
+
+--------------------------------------------------------------------------------
+-- Parse filters
+local modpath = minetest.get_modpath("filter") .. "/"
+dofile(modpath .. "filters.lua")
+
+--------------------------------------------------------------------------------
+-- Run all registered_on_init callbacks
+for _, init in pairs(registered_on_init) do
+	init()
+end
