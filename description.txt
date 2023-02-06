@@ -1,1 +1,0 @@
-A chat filter for servers.
