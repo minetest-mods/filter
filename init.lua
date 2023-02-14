@@ -83,7 +83,7 @@ function filter.mute(name, duration)
 	muted[name] = true
 
 	minetest.after(duration * 60, function()
-		privs = minetest.get_player_privs(name)
+		local privs = minetest.get_player_privs(name)
 		if privs.shout == true then
 			return
 		end
