@@ -97,7 +97,7 @@ function filter.mute(name, duration)
 end
 
 function filter.show_warning_formspec(name)
-	local formspec = "size[7,3]bgcolor[#080808BB;true]" .. default.gui_bg .. default.gui_bg_img .. [[
+	local formspec = "size[7,3]bgcolor[#080808BB;true]" .. [[
 		image[0,0;2,2;filter_warning.png]
 		label[2.3,0.5;Please watch your language!]
 	]]
